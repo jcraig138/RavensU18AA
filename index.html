@@ -512,7 +512,7 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); }
         <dt>League (OWHA) · Non-league</dt><dd><b>OWHA league games</b>, which count in the standings, and <b>every other game</b>: exhibitions and tournaments.</dd>
         <dt data-k="Venue">Home · Away (venue)</dt><dd><b>Where the game was played:</b> our rink or theirs.</dd>
         <dt data-k="Rolling average|xG for (5-game avg)|xG against (5-game avg)">Rolling average</dt><dd><b>An average over a game and the four tracked games before it.</b> It smooths out single good or bad games so the direction is easier to see.</dd>
-        <dt>Trending</dt><dd><b>The last few tracked games against the same number before them.</b> Pick 3, 5, 8 or 10 games with the buttons above the cards (5 to start). The big number is the value over the last games picked; the small line is the rolling value over that many games across the season, with the dashed line at the season figure.</dd>
+        <dt>Trending</dt><dd><b>The last few tracked games against the same number before them.</b> Pick 3, 5, 8 or 10 games with the buttons above the cards (5 to start), or Season: the season value, with the second half of the season against the first half and a season-to-date line. The big number is the value over the last games picked; the small line is the rolling value over that many games across the season, with the dashed line at the season figure.</dd>
         <dt>Improving · Slipping · Steady</dt><dd><b>Direction of a trend.</b> Improving or Slipping when the last games picked differ from the same number before them by at least 2 points (5 points for power play and penalty kill); otherwise Steady.</dd>
         <dt>pts (percentage points)</dt><dd><b>The difference between two percentages.</b> Going from 50% to 53% is +3 pts.</dd>
         <dt data-k="Season avg">Season avg</dt><dd><b>Season average</b> of that stat per game (InStat stats over tracked games; power play and penalty kill over all chances).</dd>
@@ -684,7 +684,7 @@ dash.calc('vs_record', {
 dash.calc('trends', {
   inputs: ['games'],
   title: 'Rolling trends',
-  description: 'For each window size n (3, 5, 8 or 10 tracked games) and each tracked game, the value over that game and the n-1 tracked games before it: xG share (summed), Corsi % and faceoff % (averaged), PP and PK success counted over chances.',
+  description: 'For each window size n (3, 5, 8 or 10 tracked games) and each tracked game, the value over that game and the n-1 tracked games before it; n = 0 is the season-to-date value after each game: xG share (summed), Corsi % and faceoff % (averaged), PP and PK success counted over chances.',
   fn: (games) => {
     const t = games.filter(g => g.tracked === 'yes').map(g => ({ game: Number(g.game), xgf: +g.xgf, xga: +g.xga, cf: +g.corsi_pct, fo: +g.faceoff_pct, ppg: +g.pp_goals, pp: +g.pp_chances, pkk: +g.pk_kills, sh: +g.times_sh })).sort((a, b) => a.game - b.game);
     const r1 = v => Math.round(v * 10) / 10, sum = (w, k) => w.reduce((s, x) => s + x[k], 0);
@@ -698,6 +698,13 @@ dash.calc('trends', {
         Object.keys(vals).forEach(m => out.push({ metric: m, n, game: g.game, value: vals[m] }));
       });
     });
+    t.forEach((g, i) => {
+      if (i < 2) return;
+      const w = t.slice(0, i + 1), k = w.length;
+      const vals = { xg_share: r1(100 * sum(w, 'xgf') / (sum(w, 'xgf') + sum(w, 'xga'))), corsi: r1(sum(w, 'cf') / k), faceoffs: r1(sum(w, 'fo') / k),
+        power_play: sum(w, 'pp') ? r1(100 * sum(w, 'ppg') / sum(w, 'pp')) : null, penalty_kill: sum(w, 'sh') ? r1(100 * sum(w, 'pkk') / sum(w, 'sh')) : null };
+      Object.keys(vals).forEach(m => out.push({ metric: m, n: 0, game: g.game, value: vals[m] }));
+    });
     return out;
   }
 });
@@ -705,7 +712,7 @@ dash.calc('trends', {
 dash.calc('trend_summary', {
   inputs: ['games'],
   title: 'Trend summary',
-  description: 'For each window size n (3, 5, 8 or 10): the last n tracked games against the n before them and the whole season, for xG share, Corsi %, faceoff %, PP % and PK %. Direction is better or worse when the change passes 2 points (5 for special teams). A window size is left out until there are 2n tracked games.',
+  description: 'For each window size n (3, 5, 8 or 10): the last n tracked games against the n before them and the whole season, for xG share, Corsi %, faceoff %, PP % and PK %. Direction is better or worse when the change passes 2 points (5 for special teams). A window size is left out until there are 2n tracked games. n = 0 is the whole season: last is the second half of the tracked games, prev the first half.',
   fn: (games) => {
     const t = games.filter(g => g.tracked === 'yes').sort((a, b) => Number(a.game) - Number(b.game));
     const r1 = v => Math.round(v * 10) / 10, sum = (w, k) => w.reduce((s, g) => s + Number(g[k]), 0);
@@ -726,6 +733,13 @@ dash.calc('trend_summary', {
         out.push({ metric: m, n, label: labels[m], last: a, prev: b, season: s, change: d, direction: d == null || Math.abs(d) < flat[m] ? 'Steady' : (d > 0 ? 'Improving' : 'Slipping') });
       });
     });
+    if (t.length >= 6) {
+      const h = Math.floor(t.length / 2), first = t.slice(0, h), second = t.slice(h);
+      Object.keys(calc).forEach(m => {
+        const a = calc[m](second), b = calc[m](first), s = calc[m](t), d = a == null || b == null ? null : r1(a - b);
+        out.push({ metric: m, n: 0, label: labels[m], last: a, prev: b, season: s, change: d, games_first: first.length, games_second: second.length, direction: d == null || Math.abs(d) < flat[m] ? 'Steady' : (d > 0 ? 'Improving' : 'Slipping') });
+      });
+    }
     return out;
   }
 });
@@ -944,8 +958,8 @@ dash.calc('game_avg', {
     if (!ns.includes(trN)) trN = ns.includes(5) ? 5 : ns[ns.length - 1];
     const bar = document.getElementById('tr-n'); bar.textContent = '';
     const lab = document.createElement('span'); lab.className = 'rv-sub'; lab.textContent = 'Games:'; bar.appendChild(lab);
-    ns.forEach(n => { const b = document.createElement('button'); b.type = 'button'; b.className = 'rv-preset'; b.textContent = 'Last ' + n; b.setAttribute('aria-pressed', n === trN ? 'true' : 'false'); b.addEventListener('click', () => { trN = n; drawTrends(); }); bar.appendChild(b); });
-    document.getElementById('tr-sub').textContent = `Last ${trN} tracked games against the ${trN} before. The line is ${trN === 8 ? 'an' : 'a'} ${trN}-game rolling value across the season.`;
+    ns.sort((a, b) => (a || 99) - (b || 99)).forEach(n => { const b = document.createElement('button'); b.type = 'button'; b.className = 'rv-preset'; b.textContent = n ? 'Last ' + n : 'Season'; b.setAttribute('aria-pressed', n === trN ? 'true' : 'false'); b.addEventListener('click', () => { trN = n; drawTrends(); }); bar.appendChild(b); });
+    document.getElementById('tr-sub').textContent = trN ? `Last ${trN} tracked games against the ${trN} before. The line is ${trN === 8 ? 'an' : 'a'} ${trN}-game rolling value across the season.` : 'Whole season. The big number is the season value; the comparison is the second half of the season against the first half. The line is the season-to-date value after each game.';
     ts.data.filter(r => Number(r.n) === trN).forEach(r => {
       const where = 'metric=' + r.metric + '&n=' + trN;
       const mk = (tag, field, text, cls) => { const e = document.createElement(tag); e.setAttribute('data-source', 'trend_summary'); e.setAttribute('data-where', where); e.setAttribute('data-field', field); e.textContent = text; if (cls) e.className = cls; return e; };
@@ -955,9 +969,10 @@ dash.calc('game_avg', {
       const lb = mk('span', 'label', r.label, 'lab'); if (window.rvDef && window.rvDef(r.label)) lb.title = window.rvDef(r.label); top.append(lb, mk('span', 'direction', dir, 'rv-trdir'));
       const big = document.createElement('div'); big.className = 'rv-trbig';
       const arrow = document.createElement('span'); arrow.className = 'rv-trar'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = dir === 'Improving' ? '▲' : (dir === 'Slipping' ? '▼' : '▶');
-      big.append(arrow, mk('span', 'last', r.last == null ? '—' : f1(r.last)), document.createTextNode('%'));
+      big.append(arrow, trN ? mk('span', 'last', r.last == null ? '—' : f1(r.last)) : mk('span', 'season', f1(r.season)), document.createTextNode('%'));
       const cmp = document.createElement('div'); cmp.className = 'rv-trcmp';
-      cmp.append(mk('span', 'change', r.change == null ? '—' : d3.format('+.1f')(r.change)), document.createTextNode(' pts vs '), mk('span', 'prev', r.prev == null ? '—' : f1(r.prev)), document.createTextNode('% · season '), mk('span', 'season', f1(r.season)), document.createTextNode('%'));
+      if (!trN) cmp.append(document.createTextNode('2nd half '), mk('span', 'last', r.last == null ? '—' : f1(r.last)), document.createTextNode('% vs 1st half '), mk('span', 'prev', r.prev == null ? '—' : f1(r.prev)), document.createTextNode('% ('), mk('span', 'change', r.change == null ? '—' : d3.format('+.1f')(r.change)), document.createTextNode(' pts)'));
+      else cmp.append(mk('span', 'change', r.change == null ? '—' : d3.format('+.1f')(r.change)), document.createTextNode(' pts vs '), mk('span', 'prev', r.prev == null ? '—' : f1(r.prev)), document.createTextNode('% · season '), mk('span', 'season', f1(r.season)), document.createTextNode('%'));
       const sp = document.createElement('div'); sp.className = 'rv-trsp'; sp.setAttribute('data-source', 'trends');
       card.append(top, big, cmp, sp); el.appendChild(card);
       // sparkline
@@ -966,14 +981,14 @@ dash.calc('game_avg', {
       const x = d3.scaleLinear(d3.extent(pts, p => p.g), [m, W - m - 4]);
       const ext = d3.extent(pts.map(p => p.v).concat([r.season]));
       const y = d3.scaleLinear([ext[0] - 1, ext[1] + 1], [H - m, m]);
-      const svg = d3.select(sp).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('aria-label', `${r.label} ${trN}-game rolling trend`);
+      const svg = d3.select(sp).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('aria-label', (trN ? `${r.label} ${trN}-game rolling trend` : `${r.label} season to date`));
       svg.append('line').attr('x1', m).attr('x2', W - m).attr('y1', y(r.season)).attr('y2', y(r.season)).attr('stroke', css('--cds-chart-reference')).attr('stroke-dasharray', '3 3');
       const col = cls === 'good' ? rgb('--color-ok') : (cls === 'bad' ? rgb('--color-bad') : css('--cds-chart-muted'));
       svg.append('path').datum(pts).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x(p => x(p.g)).y(p => y(p.v)));
       const lp = pts[pts.length - 1]; if (lp) svg.append('circle').attr('cx', x(lp.g)).attr('cy', y(lp.v)).attr('r', 3).attr('fill', col);
       const tip = tipper(sp); sp.style.position = 'relative';
       svg.append('rect').attr('width', W).attr('height', H).attr('fill', 'transparent')
-        .on('mousemove', ev => { const [px] = d3.pointer(ev); const p = d3.least(pts, q => Math.abs(x(q.g) - px)); if (p) tip.show(x(p.g), 0, [`Games to G${p.g}`, { text: `${r.label} ${f1(p.v)}%` }]); })
+        .on('mousemove', ev => { const [px] = d3.pointer(ev); const p = d3.least(pts, q => Math.abs(x(q.g) - px)); if (p) tip.show(x(p.g), 0, [trN ? `Games to G${p.g}` : `Season to G${p.g}`, { text: `${r.label} ${f1(p.v)}%` }]); })
         .on('mouseleave', () => tip.hide());
     });
   }
