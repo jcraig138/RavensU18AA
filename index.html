@@ -1177,7 +1177,7 @@ dash.calc('game_avg', {
       if (d.status !== 'ok') { el.textContent = '—'; return; }
       let row;
       if (el.hasAttribute('data-row')) row = d.data[Number(el.getAttribute('data-row'))];
-      else { const [k, raw] = el.getAttribute('data-where').split('='); const want = decodeURIComponent(raw); row = d.data.find(r => String(r[k]) === want); }
+      else { const conds = el.getAttribute('data-where').split('&').map(p => { const i = p.indexOf('='); return [p.slice(0, i), decodeURIComponent(p.slice(i + 1))]; }); row = d.data.find(r => conds.every(([k, w]) => String(r[k]) === w)); }
       const f = el.getAttribute('data-field');
       el.textContent = row ? fmt(f, row[f]) : '—';
       el.classList.remove('dash-skeleton');
