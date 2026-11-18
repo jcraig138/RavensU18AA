@@ -1355,5 +1355,16 @@ window.addEventListener('rv-tab', () => { if (window.rvResort) window.rvResort()
 
 <p class="rv-footnote">Standalone copy of the Ravens season dashboard. Data through 15 Nov 2026 (game log from InStat, with the 15 Nov North Halton game as a result only; OWHA standings and schedule as of 17 Nov 2026; MyHockeyRankings as of its 11 Nov update). No player names.</p>
 </div>
+<style>
+/* layout fixes 17 Nov: even KPI rows, full-width takeaway, no orphan cards */
+.rv .rv-head { gap: var(--cds-gap-sm); }
+.rv .rv-take { max-width: none; }
+.rv .rv-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.rv #sh-kpis, .rv #kpi-grid, .rv #tr-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rv .rv-kpis > .rv-kpi { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: var(--cds-gap-xs); align-content: start; }
+@media (max-width: 1100px) { .rv .rv-kpis, .rv #kpi-grid, .rv #tr-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .rv .rv-kpis, .rv #kpi-grid, .rv #tr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 400px) { .rv .rv-kpis, .rv #kpi-grid, .rv #tr-grid { grid-template-columns: 1fr; } }
+</style>
 </body>
 </html>
